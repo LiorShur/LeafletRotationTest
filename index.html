@@ -42,6 +42,8 @@
   <script>
     let rotationEnabled = false;
     let currentHeading = 0;
+    let smoothedHeading = 0;
+    const smoothingFactor = 0.1;  // Between 0 (no update) and 1 (immediate snap)
 
     const mapContainer = document.getElementById('map-container');
     const toggleBtn = document.getElementById('toggleBtn');
@@ -81,8 +83,15 @@
     }
 
     function rotateMap(degrees) {
-      mapContainer.style.transform = `rotate(${-degrees}deg)`;
-    }
+  // Apply exponential smoothing
+  smoothedHeading = smoothedHeading + smoothingFactor * (degrees - smoothedHeading);
+
+  // Only update if change is significant (e.g., > 0.5 degrees)
+  if (Math.abs(degrees - smoothedHeading) > 0.5) {
+    mapContainer.style.transform = `rotate(${-smoothedHeading}deg)`;
+  }
+}
+
   </script>
 </body>
 </html>
