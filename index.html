@@ -63,24 +63,54 @@
       }
     });
 
+    let rotationEnabled = false;
+let currentHeading = 0;       // Latest raw compass heading
+let targetHeading = 0;        // Smoothed heading
+let animationFrameId = null;
+
     // Listen to device orientation
     window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-    window.addEventListener('deviceorientation', handleOrientation, true);
+window.addEventListener('deviceorientation', handleOrientation, true);
 
-    function handleOrientation(event) {
-      if (!rotationEnabled) return;
+function handleOrientation(event) {
+  if (!rotationEnabled) return;
 
-      let heading = event.alpha;
+  let heading = event.alpha;
 
-      if (typeof event.webkitCompassHeading !== "undefined") {
-        heading = event.webkitCompassHeading; // iOS
-      }
+  if (typeof event.webkitCompassHeading !== "undefined") {
+    heading = event.webkitCompassHeading;
+  }
 
-      if (heading !== null && !isNaN(heading)) {
-        currentHeading = heading;
-        rotateMap(currentHeading);
-      }
-    }
+  if (heading !== null && !isNaN(heading)) {
+    currentHeading = heading;
+  }
+}
+    
+function updateRotation() {
+  if (!rotationEnabled) return;
+
+  const diff = ((((currentHeading - targetHeading) % 360) + 540) % 360) - 180;
+  targetHeading += diff * 0.1;  // smoothing factor
+
+  // Clamp to 0-360
+  targetHeading = (targetHeading + 360) % 360;
+
+  mapContainer.style.transform = `rotate(${-targetHeading}deg)`;
+
+  animationFrameId = requestAnimationFrame(updateRotation);
+}
+toggleBtn.addEventListener('click', () => {
+  rotationEnabled = !rotationEnabled;
+  toggleBtn.innerText = rotationEnabled ? 'Disable Rotation' : 'Enable Rotation';
+
+  if (rotationEnabled) {
+    animationFrameId = requestAnimationFrame(updateRotation);
+  } else {
+    cancelAnimationFrame(animationFrameId);
+    mapContainer.style.transform = 'rotate(0deg)';
+  }
+});
+
 
     function rotateMap(degrees) {
   // Apply exponential smoothing
