@@ -46,11 +46,70 @@
       border-radius: 4px;
       display: none;
     }
+    #compass {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      width: 60px;
+      height: 60px;
+      background: rgba(255,255,255,0.9);
+      border: 2px solid #333;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      transform-origin: center center;
+      transition: none;
+    }
+    #compass-needle {
+      width: 2px;
+      height: 40px;
+      position: relative;
+      transform-origin: center bottom;
+    }
+    #compass-needle::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -3px;
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-bottom: 20px solid #e74c3c; /* Red for North */
+    }
+    #compass-needle::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: -3px;
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 20px solid #34495e; /* Dark gray for South */
+    }
+    #compass-center {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      background: #2c3e50;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
   </style>
 </head>
 <body>
   <div id="toggleBtn">Enable Rotation</div>
   <div id="debug"></div>
+  <div id="compass">
+    <div id="compass-needle"></div>
+    <div id="compass-center"></div>
+  </div>
   <div id="map-container">
     <div id="map"></div>
   </div>
@@ -69,6 +128,7 @@
   const mapContainer = document.getElementById('map-container');
   const toggleBtn = document.getElementById('toggleBtn');
   const debugDiv = document.getElementById('debug');
+  const compassDiv = document.getElementById('compass');
   
   // Initialize map
   // const map = L.map('map').setView([51.505, -0.09], 13);
@@ -124,6 +184,7 @@
     } else {
       cancelAnimationFrame(animationFrameId);
       mapContainer.style.transform = 'rotate(0deg)';
+      compassDiv.style.transform = 'rotate(0deg)';
       debugDiv.style.display = 'none';
     }
   });
@@ -207,6 +268,7 @@
     // Only apply transform if change is significant
     if (Math.abs(diff) > 0.1) {
       mapContainer.style.transform = `rotate(${-smoothedHeading}deg)`;
+      compassDiv.style.transform = `rotate(${smoothedHeading}deg)`;
     }
     
     // Update debug info
@@ -225,6 +287,5 @@
     attachOrientationListeners();
   }
 </script>
-  <script src="app.js"></script>
 </body>
 </html>
