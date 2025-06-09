@@ -13,8 +13,11 @@
       overflow: hidden;
     }
     #map-container {
-      width: 100%;
-      height: 100%;
+      width: 141.42%; /* √2 ≈ 1.4142 to cover corners when rotated */
+      height: 141.42%;
+      position: absolute;
+      top: -20.71%; /* Center the oversized container: (141.42-100)/2 = 20.71% */
+      left: -20.71%;
       transform-origin: center center;
       transition: none; /* Removed CSS transition - we handle smoothing in JS */
     }
