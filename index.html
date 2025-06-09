@@ -12,14 +12,12 @@
       padding: 0;
       overflow: hidden;
     }
-
     #map-container {
       width: 100%;
       height: 100%;
       transform-origin: center center;
-      transition: transform 0.1s linear;
+      transition: none; /* Removed CSS transition - we handle smoothing in JS */
     }
-
     #toggleBtn {
       position: absolute;
       top: 10px;
@@ -29,79 +27,200 @@
       padding: 8px 12px;
       border: 1px solid #ccc;
       cursor: pointer;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    #debug {
+      position: absolute;
+      top: 50px;
+      left: 10px;
+      z-index: 1000;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      border-radius: 4px;
+      display: none;
     }
   </style>
 </head>
 <body>
   <div id="toggleBtn">Enable Rotation</div>
+  <div id="debug"></div>
   <div id="map-container">
     <div id="map"></div>
   </div>
-
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
   let rotationEnabled = false;
   let currentHeading = 0;
-  let targetHeading = 0;
+  let smoothedHeading = 0;
   let animationFrameId = null;
-
+  let lastUpdateTime = 0;
+  let headingHistory = [];
+  const HISTORY_SIZE = 5;
+  const SMOOTHING_FACTOR = 0.15; // Increased for more responsiveness
+  const MIN_CHANGE_THRESHOLD = 0.3; // Only update if change is significant enough
+  
   const mapContainer = document.getElementById('map-container');
   const toggleBtn = document.getElementById('toggleBtn');
-
+  const debugDiv = document.getElementById('debug');
+  
+  // Initialize map
   const map = L.map('map').setView([51.505, -0.09], 13);
-
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Single toggle button handler
+  // Utility function to normalize angles to 0-360 range
+  function normalizeAngle(angle) {
+    return ((angle % 360) + 360) % 360;
+  }
+
+  // Calculate shortest angular distance between two angles
+  function angleDifference(target, current) {
+    const diff = normalizeAngle(target - current);
+    return diff > 180 ? diff - 360 : diff;
+  }
+
+  // Apply moving average to smooth compass readings
+  function addToHistory(heading) {
+    headingHistory.push(heading);
+    if (headingHistory.length > HISTORY_SIZE) {
+      headingHistory.shift();
+    }
+  }
+
+  function getSmoothedHeading() {
+    if (headingHistory.length === 0) return currentHeading;
+    
+    // Use circular mean for angle averaging
+    let sinSum = 0, cosSum = 0;
+    for (let heading of headingHistory) {
+      const rad = heading * Math.PI / 180;
+      sinSum += Math.sin(rad);
+      cosSum += Math.cos(rad);
+    }
+    
+    const avgRad = Math.atan2(sinSum / headingHistory.length, cosSum / headingHistory.length);
+    return normalizeAngle(avgRad * 180 / Math.PI);
+  }
+
+  // Toggle button handler
   toggleBtn.addEventListener('click', () => {
     rotationEnabled = !rotationEnabled;
     toggleBtn.innerText = rotationEnabled ? 'Disable Rotation' : 'Enable Rotation';
-
+    
     if (rotationEnabled) {
-      animationFrameId = requestAnimationFrame(updateRotation);
+      // Initialize smoothed heading to current heading
+      smoothedHeading = currentHeading;
+      headingHistory = [currentHeading];
+      debugDiv.style.display = 'block';
+      startRotationLoop();
     } else {
       cancelAnimationFrame(animationFrameId);
       mapContainer.style.transform = 'rotate(0deg)';
+      debugDiv.style.display = 'none';
     }
   });
 
-  // Read compass heading (always store currentHeading)
-  window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-  window.addEventListener('deviceorientation', handleOrientation, true);
-
+  // Enhanced compass reading with error checking
   function handleOrientation(event) {
-    let heading = event.alpha;
-
+    let heading = null;
+    
+    // Try different compass heading sources
     if (typeof event.webkitCompassHeading !== "undefined") {
       heading = event.webkitCompassHeading;
+    } else if (event.alpha !== null && event.alpha !== undefined) {
+      heading = 360 - event.alpha; // Convert to compass heading
     }
-
-    if (heading !== null && !isNaN(heading)) {
-      currentHeading = heading;
+    
+    // Validate heading
+    if (heading !== null && !isNaN(heading) && isFinite(heading)) {
+      heading = normalizeAngle(heading);
+      
+      // Only update if significant change to reduce noise
+      const change = Math.abs(angleDifference(heading, currentHeading));
+      if (change > MIN_CHANGE_THRESHOLD || headingHistory.length === 0) {
+        currentHeading = heading;
+        addToHistory(heading);
+      }
     }
   }
 
-  // Animation loop with wraparound-safe smoothing
+  // Request permission for device orientation on iOS
+  function requestOrientationPermission() {
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission()
+        .then(permissionState => {
+          if (permissionState === 'granted') {
+            attachOrientationListeners();
+          } else {
+            alert('Device orientation permission denied');
+          }
+        })
+        .catch(console.error);
+    } else {
+      attachOrientationListeners();
+    }
+  }
+
+  function attachOrientationListeners() {
+    if ('ondeviceorientationabsolute' in window) {
+      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+    } else {
+      window.addEventListener('deviceorientation', handleOrientation, true);
+    }
+  }
+
+  // Start rotation animation loop
+  function startRotationLoop() {
+    if (!rotationEnabled) return;
+    
+    const now = performance.now();
+    const deltaTime = now - lastUpdateTime;
+    
+    // Throttle updates to ~60fps
+    if (deltaTime >= 16) {
+      updateRotation();
+      lastUpdateTime = now;
+    }
+    
+    animationFrameId = requestAnimationFrame(startRotationLoop);
+  }
+
+  // Smooth rotation update
   function updateRotation() {
     if (!rotationEnabled) return;
+    
+    const targetHeading = getSmoothedHeading();
+    const diff = angleDifference(targetHeading, smoothedHeading);
+    
+    // Apply exponential smoothing
+    smoothedHeading += diff * SMOOTHING_FACTOR;
+    smoothedHeading = normalizeAngle(smoothedHeading);
+    
+    // Only apply transform if change is significant
+    if (Math.abs(diff) > 0.1) {
+      mapContainer.style.transform = `rotate(${-smoothedHeading}deg)`;
+    }
+    
+    // Update debug info
+    debugDiv.innerHTML = `
+      Raw: ${currentHeading.toFixed(1)}°<br>
+      Target: ${targetHeading.toFixed(1)}°<br>
+      Smooth: ${smoothedHeading.toFixed(1)}°<br>
+      Diff: ${diff.toFixed(1)}°
+    `;
+  }
 
-    const diff = ((((currentHeading - targetHeading) % 360) + 540) % 360) - 180;
-    targetHeading += diff * 0.02; // smoother, slower interpolation
-
-    targetHeading = (targetHeading + 360) % 360;
-
-    if (Math.abs(diff) < 0.5) {
-  animationFrameId = requestAnimationFrame(updateRotation);
-  return;
-}
-
-    mapContainer.style.transform = `rotate(${-targetHeading}deg)`;
-
-    animationFrameId = requestAnimationFrame(updateRotation);
+  // Initialize orientation listeners
+  if (window.location.protocol === 'https:') {
+    requestOrientationPermission();
+  } else {
+    attachOrientationListeners();
   }
 </script>
-
 </body>
 </html>
