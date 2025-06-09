@@ -39,88 +39,64 @@
   </div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script>
-    let rotationEnabled = false;
-    let currentHeading = 0;
-    let smoothedHeading = 0;
-    const smoothingFactor = 0.1;  // Between 0 (no update) and 1 (immediate snap)
+<script>
+  let rotationEnabled = false;
+  let currentHeading = 0;
+  let targetHeading = 0;
+  let animationFrameId = null;
 
-    const mapContainer = document.getElementById('map-container');
-    const toggleBtn = document.getElementById('toggleBtn');
+  const mapContainer = document.getElementById('map-container');
+  const toggleBtn = document.getElementById('toggleBtn');
 
-    const map = L.map('map').setView([51.505, -0.09], 13);
+  const map = L.map('map').setView([51.505, -0.09], 13);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
 
-    toggleBtn.addEventListener('click', () => {
-      rotationEnabled = !rotationEnabled;
-      toggleBtn.innerText = rotationEnabled ? 'Disable Rotation' : 'Enable Rotation';
+  // Single toggle button handler
+  toggleBtn.addEventListener('click', () => {
+    rotationEnabled = !rotationEnabled;
+    toggleBtn.innerText = rotationEnabled ? 'Disable Rotation' : 'Enable Rotation';
 
-      if (!rotationEnabled) {
-        mapContainer.style.transform = 'rotate(0deg)';
-      }
-    });
+    if (rotationEnabled) {
+      animationFrameId = requestAnimationFrame(updateRotation);
+    } else {
+      cancelAnimationFrame(animationFrameId);
+      mapContainer.style.transform = 'rotate(0deg)';
+    }
+  });
 
-    
-let targetHeading = 0;        // Smoothed heading
-let animationFrameId = null;
+  // Read compass heading (always store currentHeading)
+  window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+  window.addEventListener('deviceorientation', handleOrientation, true);
 
-    // Listen to device orientation
-    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-window.addEventListener('deviceorientation', handleOrientation, true);
+  function handleOrientation(event) {
+    let heading = event.alpha;
 
-function handleOrientation(event) {
-  if (!rotationEnabled) return;
+    if (typeof event.webkitCompassHeading !== "undefined") {
+      heading = event.webkitCompassHeading;
+    }
 
-  let heading = event.alpha;
-
-  if (typeof event.webkitCompassHeading !== "undefined") {
-    heading = event.webkitCompassHeading;
+    if (heading !== null && !isNaN(heading)) {
+      currentHeading = heading;
+    }
   }
 
-  if (heading !== null && !isNaN(heading)) {
-    currentHeading = heading;
-  }
-}
-    
-function updateRotation() {
-  if (!rotationEnabled) return;
+  // Animation loop with wraparound-safe smoothing
+  function updateRotation() {
+    if (!rotationEnabled) return;
 
-  const diff = ((((currentHeading - targetHeading) % 360) + 540) % 360) - 180;
-  targetHeading += diff * 0.1;  // smoothing factor
+    const diff = ((((currentHeading - targetHeading) % 360) + 540) % 360) - 180;
+    targetHeading += diff * 0.1;  // smoothing factor
 
-  // Clamp to 0-360
-  targetHeading = (targetHeading + 360) % 360;
+    targetHeading = (targetHeading + 360) % 360;
 
-  mapContainer.style.transform = `rotate(${-targetHeading}deg)`;
+    mapContainer.style.transform = `rotate(${-targetHeading}deg)`;
 
-  animationFrameId = requestAnimationFrame(updateRotation);
-}
-toggleBtn.addEventListener('click', () => {
-  rotationEnabled = !rotationEnabled;
-  toggleBtn.innerText = rotationEnabled ? 'Disable Rotation' : 'Enable Rotation';
-
-  if (rotationEnabled) {
     animationFrameId = requestAnimationFrame(updateRotation);
-  } else {
-    cancelAnimationFrame(animationFrameId);
-    mapContainer.style.transform = 'rotate(0deg)';
   }
-});
+</script>
 
-
-    function rotateMap(degrees) {
-  // Apply exponential smoothing
-  smoothedHeading = smoothedHeading + smoothingFactor * (degrees - smoothedHeading);
-
-  // Only update if change is significant (e.g., > 0.5 degrees)
-  if (Math.abs(degrees - smoothedHeading) > 0.5) {
-    mapContainer.style.transform = `rotate(${-smoothedHeading}deg)`;
-  }
-}
-
-  </script>
 </body>
 </html>
