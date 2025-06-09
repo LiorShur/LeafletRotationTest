@@ -88,9 +88,14 @@
     if (!rotationEnabled) return;
 
     const diff = ((((currentHeading - targetHeading) % 360) + 540) % 360) - 180;
-    targetHeading += diff * 0.1;  // smoothing factor
+    targetHeading += diff * 0.02; // smoother, slower interpolation
 
     targetHeading = (targetHeading + 360) % 360;
+
+    if (Math.abs(diff) < 0.5) {
+  animationFrameId = requestAnimationFrame(updateRotation);
+  return;
+}
 
     mapContainer.style.transform = `rotate(${-targetHeading}deg)`;
 
